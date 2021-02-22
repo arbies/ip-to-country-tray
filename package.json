@@ -1,7 +1,7 @@
 {
   "name": "ip-to-country-tray",
   "description": "A multi-platform tool to show country of current IP in tray",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "scripts": {
     "serve": "vue-cli-service serve",

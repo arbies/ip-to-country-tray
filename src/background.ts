@@ -19,11 +19,14 @@ protocol.registerSchemesAsPrivileged([
   { scheme: 'app', privileges: { secure: true, standard: true } }
 ])
 
+// get path to assets folder
 function getAssetsPath() {
+  // based on prod. or dev. env. path to assests change
   return isDevelopment ? path.join(__dirname, '../src/assets') : './resources/src/assets'
 }
 
-function initTray(country?: String, ip?: String) {
+// initialize tray icon
+function initTray(country?: string, ip?: string) {
   app.whenReady().then(() => {
     const aboutDialogOptions: MessageBoxOptions = {
       type: 'none',
@@ -41,17 +44,19 @@ function initTray(country?: String, ip?: String) {
       { label: 'Exit', type: 'normal', click: () => app.quit() }
     ])
 
-    tray = new Tray(`${getAssetsPath()}/flags/${country || 'am'}.png`)
+    tray = new Tray(`${getAssetsPath()}/flags/${country || 'ZZ'}.png`)
     tray.setToolTip('IP to Country Tray' + (ip && country ? `\nIP: ${ip} (${country.toUpperCase()})` : ''))
     tray.setContextMenu(contextMenu)
   })
 }
 
-function setTrayByCountry(country: String) {
-  tray.setImage(`${getAssetsPath()}/flags/${country}.png`)
+// chaneg tray icon based on given country code
+function setTrayByCountry(country?: string) {
+  tray.setImage(`${getAssetsPath()}/flags/${country || 'ZZ'}.png`)
 }
 
-async function getIPCountry(ip: String) {
+// API call to get country which provided IP is
+async function getIPCountry(ip: string) {
   try {
     const response = await axios.get(`https://ip2c.org/${ip}`)
     const result = response.data
@@ -62,31 +67,58 @@ async function getIPCountry(ip: String) {
   }
 }
 
+// get public IP
+async function getIP(): Promise<string> {
+  try {
+    return await publicIp.v4({ timeout: 1000 })
+  } catch {
+    return ''
+  }
+}
+
+// show system notification
+function showNotification (title: string, body: string): void {
+  if (!notification) {
+    notification = new Notification({
+      title,
+      body,
+      icon: `${getAssetsPath()}/icon.png`,
+      timeoutType: 'never'
+    })
+  } else {
+    notification.title = title
+    notification.body = body
+  }
+
+  notification.show()
+}
+
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
 app.on('ready', async () => {
-  let previousIP = await publicIp.v4()
-  notification = new Notification({
-    title: 'IP changed!',
-    body: '',
-    icon: `${getAssetsPath()}/icon.png`,
-    timeoutType: 'never'
-  })
+  initTray()
 
-  initTray(await getIPCountry(previousIP), previousIP)
+  let previousIP: string = await getIP()
+  let country: string = ''
+
+  if (!previousIP) {
+    showNotification('Alert', 'No internet connection')
+  } else {
+    country = await getIPCountry(previousIP)
+    setTrayByCountry(country)
+  }
+
   setInterval(async () => {
-    const ip = await publicIp.v4()
+    const ip = await getIP()
 
-    if (ip !== previousIP) {
-      const country: String = await getIPCountry(ip)
-
-      notification.body = `${ip} (${country.toUpperCase()})`
+    if (!ip) {
+      showNotification('Alert', 'No internet connection')
+    } else if (ip !== previousIP) {
+      country = await getIPCountry(ip)
       setTrayByCountry(country)
-      tray.setToolTip(`IP to Country Tray\nIP: ${ip} (${country.toUpperCase()})`)
+      showNotification('IP Changed!', `IP to Country Tray\nIP: ${ip} (${country.toUpperCase()})`)
       previousIP = ip
-
-      notification.show()
     }
   }, 5000)
 })
