@@ -51,7 +51,8 @@ function initTray(country?: string, ip?: string) {
 }
 
 // chaneg tray icon based on given country code
-function setTrayByCountry(country?: string) {
+function setTrayByCountry(country?: string, ip?: string) {
+  tray.setToolTip('IP to Country Tray' + (ip && country ? `\nIP: ${ip} (${country.toUpperCase()})` : ''))
   tray.setImage(`${getAssetsPath()}/flags/${country || 'ZZ'}.png`)
 }
 
@@ -101,24 +102,33 @@ app.on('ready', async () => {
 
   let previousIP: string = await getIP()
   let country: string = ''
+  let promptNoInternet: boolean = true
 
-  if (!previousIP) {
+  if (!previousIP && promptNoInternet) {
     showNotification('Alert', 'No internet connection')
+
+    promptNoInternet = false
   } else {
     country = await getIPCountry(previousIP)
-    setTrayByCountry(country)
+    setTrayByCountry(country, previousIP)
+
+    promptNoInternet = true
   }
 
   setInterval(async () => {
     const ip = await getIP()
 
-    if (!ip) {
+    if (!ip && promptNoInternet) {
       showNotification('Alert', 'No internet connection')
+
+      promptNoInternet = false
     } else if (ip !== previousIP) {
       country = await getIPCountry(ip)
-      setTrayByCountry(country)
+      setTrayByCountry(country, ip)
       showNotification('IP Changed!', `IP to Country Tray\nIP: ${ip} (${country.toUpperCase()})`)
+
       previousIP = ip
+      promptNoInternet = true
     }
   }, 5000)
 })
