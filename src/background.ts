@@ -13,6 +13,7 @@ import { MessageBoxOptions } from 'electron/main'
 const isDevelopment = process.env.NODE_ENV !== 'production'
 let tray: Tray
 let notification: Notification
+let enableNotifications: boolean = true
 
 // Scheme must be registered before the app is ready
 protocol.registerSchemesAsPrivileged([
@@ -41,6 +42,9 @@ function initTray(country?: string, ip?: string) {
     }
     const contextMenu = Menu.buildFromTemplate([
       { label: 'About...', type: 'normal', click: () => dialog.showMessageBox(aboutDialogOptions) },
+      { type: 'separator' },
+      { label: 'Refresh', type: 'normal', click: async () => { await setIPandCountry() } },
+      { label: 'Notification', type: 'checkbox', checked: enableNotifications, click: () => { enableNotifications = !enableNotifications } },
       { label: 'Exit', type: 'normal', click: () => app.quit() }
     ])
 
@@ -78,7 +82,10 @@ async function getIP(): Promise<string> {
 }
 
 // show system notification
-function showNotification (title: string, body: string): void {
+function showNotification(title: string, body: string): void {
+  // when show-notifications flag is false there's nothing to do
+  if (!enableNotifications) return
+
   if (!notification) {
     notification = new Notification({
       title,
@@ -94,42 +101,53 @@ function showNotification (title: string, body: string): void {
   notification.show()
 }
 
+async function setIPandCountry(currentIP?: string): Promise<any> {
+  const ip = await getIP()
+
+  if (!ip) return null;
+
+  if (ip !== currentIP) {
+    const country = await getIPCountry(ip)
+
+    setTrayByCountry(country, ip)
+
+    return { ip, country };
+  }
+
+  return false;
+}
+
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
 app.on('ready', async () => {
   initTray()
 
-  let previousIP: string = await getIP()
-  let country: string = ''
-  let promptNoInternet: boolean = true
+  let previousIP: string = ""
+  let prompt: boolean = true
 
-  if (!previousIP && promptNoInternet) {
-    showNotification('Alert', 'No internet connection')
-
-    promptNoInternet = false
-  } else {
-    country = await getIPCountry(previousIP)
-    setTrayByCountry(country, previousIP)
-
-    promptNoInternet = true
-  }
+  setIPandCountry()
 
   setInterval(async () => {
     const ip = await getIP()
 
-    if (!ip && promptNoInternet) {
-      showNotification('Alert', 'No internet connection')
+    if (!ip) {
+      if (prompt) {
+        showNotification('Alert', 'No internet connection')
+        setTrayByCountry()
 
-      promptNoInternet = false
-    } else if (ip !== previousIP) {
-      country = await getIPCountry(ip)
-      setTrayByCountry(country, ip)
+        prompt = false
+      }
+    } else if (ip != previousIP) {
+      const country = await getIPCountry(ip)
+
       showNotification('IP Changed!', `IP to Country Tray\nIP: ${ip} (${country.toUpperCase()})`)
+      setTrayByCountry(country, ip)
 
-      previousIP = ip
-      promptNoInternet = true
+      prompt = true
     }
+
+    previousIP = ip
   }, 5000)
 })
 
